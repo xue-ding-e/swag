@@ -259,6 +259,10 @@ func (operation *Operation) ParseParamComment(commentLine string, astFile *ast.F
 	name := matches[1]
 	paramType := matches[2]
 	refType, format := TransToValidSchemeTypeWithFormat(matches[3])
+	// Validate before enum lookup, which can itself instantiate generic models.
+	if _, err := typeDelimiterIndices(refType, 0); err != nil {
+		return fmt.Errorf("invalid type %q: %w", refType, err)
+	}
 
 	// Detect refType
 	objectType := OBJECT
@@ -719,7 +723,8 @@ func parseMimeTypeList(mimeTypeList string, typeList *[]string, format string) e
 // Keep the path separate from annotation whitespace; validate Unicode below.
 var routerPattern = regexp.MustCompile(`^(/\S*)[[:blank:]]+\[(\w+)]`)
 
-// validRouterPath accepts URI path characters and visible Unicode, while
+// validRouterPath accepts URI path characters, visible Unicode and the Unicode
+// joiners used by scripts and emoji, while
 // preserving framework parameters such as {id}, :id, and *path verbatim.
 func validRouterPath(path string) bool {
 	if !utf8.ValidString(path) {
@@ -734,6 +739,9 @@ func validRouterPath(path string) bool {
 				continue
 			}
 			return false
+		}
+		if r == '\u200c' || r == '\u200d' {
+			continue
 		}
 		if !unicode.IsGraphic(r) || unicode.IsSpace(r) {
 			return false
@@ -867,14 +875,140 @@ func findTypeDef(importPath, typeName string) (*ast.TypeSpec, error) {
 
 var responsePattern = regexp.MustCompile(`^([\w,]+)\s+([\w{}]+)\s+([^\s"]+(?:\s+[^\s"]+)*)\s*(".*)?`)
 
-// ResponseType{data1=Type1,data2=Type2}.
-var combinedPattern = regexp.MustCompile(`^([\w\p{L}\p{N}\-./\[\]]+){(.*)}$`)
+// Bound annotation parsing independently of the recursive model definitions.
+const (
+	maxSchemaTypeLength = 64 * 1024
+	maxSchemaTypeDepth  = 128
+)
+
+// typeDelimiterIndices finds separators outside generic arguments and combined
+// schema fields. A stack also rejects crossed delimiters such as [{]} and
+// bounds container chains even when consecutive [] pairs do not nest brackets.
+// Delimiters are ASCII, so byte offsets preserve Unicode names verbatim.
+func typeDelimiterIndices(s string, delimiter byte) ([]int, error) {
+	if len(s) > maxSchemaTypeLength || !utf8.ValidString(s) {
+		return nil, fmt.Errorf("invalid or oversized type expression")
+	}
+	for _, r := range s {
+		// Keep annotation whitespace. JSON field names are not Go identifiers,
+		// so their Unicode format characters must remain intact for lookup.
+		if unicode.IsControl(r) && r != '\t' && r != '\n' && r != '\r' {
+			return nil, fmt.Errorf("invalid control character in type expression")
+		}
+	}
+
+	var stack [maxSchemaTypeDepth]byte
+	var branchDepth [maxSchemaTypeDepth]int
+	var restoreDepth [maxSchemaTypeDepth]int
+	depth := 0
+	containers := 0
+	var indices []int
+	for i := 0; i < len(s); i++ {
+		char := s[i]
+		if char == delimiter && depth == 0 {
+			indices = append(indices, i)
+		}
+		switch char {
+		case '[', '{':
+			if depth == len(stack) || containers == maxSchemaTypeDepth {
+				return nil, fmt.Errorf("type expression exceeds maximum nesting depth")
+			}
+			stack[depth] = char
+			restoreDepth[depth] = containers
+			containers++
+			branchDepth[depth] = containers
+			// Slices and maps continue with their element/value after ']'.
+			// Generic arguments end there, restoring the enclosing branch.
+			if char == '[' && (i+1 < len(s) && s[i+1] == ']' || isMapTypeBracket(s, i)) {
+				restoreDepth[depth] = containers
+			}
+			depth++
+		case ']', '}':
+			if depth == 0 || char == ']' && stack[depth-1] != '[' || char == '}' && stack[depth-1] != '{' {
+				return nil, fmt.Errorf("unbalanced type expression")
+			}
+			depth--
+			containers = restoreDepth[depth]
+			if char == delimiter && depth == 0 {
+				indices = append(indices, i)
+			}
+		case ',':
+			containers = 0
+			if depth > 0 {
+				containers = branchDepth[depth-1]
+			}
+		case '=':
+			if depth == 0 {
+				containers = 0
+			} else if stack[depth-1] == '{' {
+				containers = branchDepth[depth-1]
+			}
+		}
+	}
+	if depth != 0 {
+		return nil, fmt.Errorf("unbalanced type expression")
+	}
+	return indices, nil
+}
+
+// isMapTypeBracket distinguishes map keys from named generic arguments without
+// restricting the package paths and custom schema names accepted by lookup.
+func isMapTypeBracket(s string, index int) bool {
+	end := index
+	for end > 0 {
+		r, size := utf8.DecodeLastRuneInString(s[:end])
+		if !unicode.IsSpace(r) {
+			break
+		}
+		end -= size
+	}
+	if end < 3 || s[end-3:end] != "map" {
+		return false
+	}
+	if end == 3 {
+		return true
+	}
+	r, _ := utf8.DecodeLastRuneInString(s[:end-3])
+	return !unicode.IsLetter(r) && !unicode.IsDigit(r) && !strings.ContainsRune("_./-$", r)
+}
+
+// splitTypeList preserves empty entries so each caller can apply its own rules:
+// combined schemas ignore empty fields, whereas generic arguments cannot be empty.
+func splitTypeList(s string) ([]string, error) {
+	indices, err := typeDelimiterIndices(s, ',')
+	if err != nil {
+		return nil, err
+	}
+	parts := make([]string, 0, len(indices)+1)
+	start := 0
+	for _, i := range indices {
+		parts = append(parts, s[start:i])
+		start = i + 1
+	}
+	return append(parts, s[start:]), nil
+}
 
 func (operation *Operation) parseObjectSchema(refType string, astFile *ast.File) (*spec.Schema, error) {
 	return parseObjectSchema(operation.parser, refType, astFile)
 }
 
 func parseObjectSchema(parser *Parser, refType string, astFile *ast.File) (*spec.Schema, error) {
+	return parseObjectSchemaDepth(parser, refType, astFile, 0)
+}
+
+func parseObjectSchemaDepth(parser *Parser, refType string, astFile *ast.File, depth int) (*spec.Schema, error) {
+	if depth > maxSchemaTypeDepth || len(refType) > maxSchemaTypeLength {
+		return nil, fmt.Errorf("type expression exceeds maximum length or nesting depth")
+	}
+	braces, err := typeDelimiterIndices(refType, '{')
+	if err != nil {
+		return nil, fmt.Errorf("invalid type %q: %w", refType, err)
+	}
+	refType = strings.TrimSpace(refType)
+	if refType == "" {
+		return nil, fmt.Errorf("invalid empty type expression")
+	}
+
 	switch {
 	case refType == NIL:
 		return nil, nil
@@ -887,7 +1021,7 @@ func parseObjectSchema(parser *Parser, refType string, astFile *ast.File) (*spec
 	case IsPrimitiveType(refType):
 		return PrimitiveSchema(refType), nil
 	case strings.HasPrefix(refType, "[]"):
-		schema, err := parseObjectSchema(parser, refType[2:], astFile)
+		schema, err := parseObjectSchemaDepth(parser, refType[2:], astFile, depth+1)
 		if err != nil {
 			return nil, err
 		}
@@ -895,24 +1029,24 @@ func parseObjectSchema(parser *Parser, refType string, astFile *ast.File) (*spec
 		return spec.ArrayProperty(schema), nil
 	case strings.HasPrefix(refType, "map["):
 		// ignore key type
-		idx := strings.Index(refType, "]")
-		if idx < 0 {
+		closing, err := typeDelimiterIndices(refType, ']')
+		if err != nil || len(closing) == 0 {
 			return nil, fmt.Errorf("invalid type: %s", refType)
 		}
 
-		refType = refType[idx+1:]
+		refType = refType[closing[0]+1:]
 		if refType == INTERFACE || refType == ANY {
 			return spec.MapProperty(nil), nil
 		}
 
-		schema, err := parseObjectSchema(parser, refType, astFile)
+		schema, err := parseObjectSchemaDepth(parser, refType, astFile, depth+1)
 		if err != nil {
 			return nil, err
 		}
 
 		return spec.MapProperty(schema), nil
-	case strings.Contains(refType, "{"):
-		return parseCombinedObjectSchema(parser, refType, astFile)
+	case len(braces) > 0:
+		return parseCombinedObjectSchemaDepth(parser, refType, astFile, depth)
 	default:
 		if parser != nil { // checking refType has existing in 'TypeDefinitions'
 			schema, err := parser.getTypeSchema(refType, astFile, true)
@@ -928,40 +1062,53 @@ func parseObjectSchema(parser *Parser, refType string, astFile *ast.File) (*spec
 }
 
 func parseFields(s string) []string {
-	nestLevel := 0
-
-	return strings.FieldsFunc(s, func(char rune) bool {
-		if char == '{' {
-			nestLevel++
-
-			return false
-		} else if char == '}' {
-			nestLevel--
-
-			return false
+	fields, err := splitTypeList(s)
+	if err != nil {
+		return nil
+	}
+	var nonEmpty []string
+	for _, field := range fields {
+		if field != "" {
+			nonEmpty = append(nonEmpty, field)
 		}
-
-		return char == ',' && nestLevel == 0
-	})
+	}
+	return nonEmpty
 }
 
+// ResponseType{data1=Type1,data2=Type2}.
 func parseCombinedObjectSchema(parser *Parser, refType string, astFile *ast.File) (*spec.Schema, error) {
-	matches := combinedPattern.FindStringSubmatch(refType)
-	if len(matches) != 3 {
+	return parseCombinedObjectSchemaDepth(parser, refType, astFile, 0)
+}
+
+func parseCombinedObjectSchemaDepth(parser *Parser, refType string, astFile *ast.File, depth int) (*spec.Schema, error) {
+	if depth > maxSchemaTypeDepth || len(refType) > maxSchemaTypeLength {
+		return nil, fmt.Errorf("type expression exceeds maximum length or nesting depth")
+	}
+	refType = strings.TrimSpace(refType)
+	braces, err := typeDelimiterIndices(refType, '{')
+	if err != nil || len(braces) != 1 || braces[0] == 0 || !strings.HasSuffix(refType, "}") {
 		return nil, fmt.Errorf("invalid type: %s", refType)
 	}
 
-	schema, err := parseObjectSchema(parser, matches[1], astFile)
+	schema, err := parseObjectSchemaDepth(parser, refType[:braces[0]], astFile, depth+1)
 	if err != nil {
 		return nil, err
 	}
 
-	fields, props := parseFields(matches[2]), map[string]spec.Schema{}
+	fields, err := splitTypeList(refType[braces[0]+1 : len(refType)-1])
+	if err != nil {
+		return nil, fmt.Errorf("invalid type %q: %w", refType, err)
+	}
+	props := map[string]spec.Schema{}
 
 	for _, field := range fields {
 		keyVal := strings.SplitN(field, "=", 2)
 		if len(keyVal) == 2 {
-			schema, err := parseObjectSchema(parser, keyVal[1], astFile)
+			key := strings.TrimSpace(keyVal[0])
+			if key == "" {
+				return nil, fmt.Errorf("invalid empty field name in type: %s", refType)
+			}
+			schema, err := parseObjectSchemaDepth(parser, keyVal[1], astFile, depth+1)
 			if err != nil {
 				return nil, err
 			}
@@ -970,12 +1117,15 @@ func parseCombinedObjectSchema(parser *Parser, refType string, astFile *ast.File
 				schema = PrimitiveSchema(OBJECT)
 			}
 
-			props[keyVal[0]] = *schema
+			props[key] = *schema
 		}
 	}
 
 	if len(props) == 0 {
 		return schema, nil
+	}
+	if schema == nil {
+		return nil, fmt.Errorf("invalid nil base in combined type: %s", refType)
 	}
 
 	if schema.Ref.GetURL() == nil && len(schema.Type) > 0 && schema.Type[0] == OBJECT && len(schema.Properties) == 0 && schema.AdditionalProperties == nil {

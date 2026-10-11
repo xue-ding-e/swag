@@ -9,6 +9,9 @@ func TestXuedingeRouterPaths(t *testing.T) {
 		{"chinese", "/用户/订单/{编号} [get]", "/用户/订单/{编号}", "GET"},
 		{"gva", "/clientUser/login微信公众号 [post]", "/clientUser/login微信公众号", "POST"},
 		{"unicode", "/café/δοκιμή/東京/e\u0301 [get]", "/café/δοκιμή/東京/e\u0301", "GET"},
+		{"zwj", "/👩\u200d💻 [get]", "/👩\u200d💻", "GET"},
+		{"zwnj", "/می\u200cروم [get]", "/می\u200cروم", "GET"},
+		{"rtl", "/العربية/עברית [get]", "/العربية/עברית", "GET"},
 		{"emoji", "/标记/😀 [get]", "/标记/😀", "GET"},
 		{"tilde-at", "/~用户/@姓名 [get]", "/~用户/@姓名", "GET"},
 		{"encoded", "/%E7%94%A8%E6%88%B7/%20 [get]", "/%E7%94%A8%E6%88%B7/%20", "GET"},
@@ -41,8 +44,9 @@ func TestXuedingeRouterRejectsMalformedPaths(t *testing.T) {
 		"/用户 名 [get]", "/用户\t名 [get]", "/用户\n名 [get]",
 		"/用户\x00名 [get]", "/用户\u00a0名 [get]", "/用户\u200b名 [get]",
 		"/用户\u202e名 [get]", "/用户\u2028名 [get]",
-		// Invisible format controls, including emoji joiners, are not supported.
-		"/👩\u200d💻 [get]",
+		// Directional controls and unrelated invisible formatting remain invalid.
+		"/用户\u200e名 [get]", "/用户\u200f名 [get]", "/用户\ufeff名 [get]",
+		"/bad\xff [get]",
 		"/bad% [get]", "/bad%2 [get]", "/bad%GG [get]",
 		"/用户?名字=值 [get]", "/用户#片段 [get]", "/用户\\名称 [get]",
 		"/用户 [get,post]", "/用户 [unknown]",

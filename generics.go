@@ -35,8 +35,15 @@ func normalizeGenericTypeName(name string) string {
 }
 
 func (pkgDefs *PackagesDefinitions) getTypeFromGenericParam(genericParam string, file *ast.File) (typeSpecDef *TypeSpecDef) {
+	return pkgDefs.getTypeFromGenericParamDepth(genericParam, file, 0)
+}
+
+func (pkgDefs *PackagesDefinitions) getTypeFromGenericParamDepth(genericParam string, file *ast.File, depth int) (typeSpecDef *TypeSpecDef) {
+	if depth > maxSchemaTypeDepth || len(genericParam) > maxSchemaTypeLength {
+		return nil
+	}
 	if strings.HasPrefix(genericParam, "[]") {
-		typeSpecDef = pkgDefs.getTypeFromGenericParam(genericParam[2:], file)
+		typeSpecDef = pkgDefs.getTypeFromGenericParamDepth(genericParam[2:], file, depth+1)
 		if typeSpecDef == nil {
 			return nil
 		}
@@ -67,11 +74,12 @@ func (pkgDefs *PackagesDefinitions) getTypeFromGenericParam(genericParam string,
 	}
 
 	if strings.HasPrefix(genericParam, "map[") {
-		parts := strings.SplitN(genericParam[4:], "]", 2)
-		if len(parts) != 2 {
+		closing, err := typeDelimiterIndices(genericParam, ']')
+		if err != nil || len(closing) == 0 {
 			return nil
 		}
-		typeSpecDef = pkgDefs.getTypeFromGenericParam(parts[1], file)
+		keyType := genericParam[4:closing[0]]
+		typeSpecDef = pkgDefs.getTypeFromGenericParamDepth(genericParam[closing[0]+1:], file, depth+1)
 		if typeSpecDef == nil {
 			return nil
 		}
@@ -88,16 +96,16 @@ func (pkgDefs *PackagesDefinitions) getTypeFromGenericParam(genericParam string,
 		}
 		return &TypeSpecDef{
 			TypeSpec: &ast.TypeSpec{
-				Name: ast.NewIdent(string(IgnoreNameOverridePrefix) + "map_" + parts[0] + "_" + typeSpecDef.TypeName()),
+				Name: ast.NewIdent(string(IgnoreNameOverridePrefix) + "map_" + keyType + "_" + typeSpecDef.TypeName()),
 				Type: &ast.MapType{
-					Key:   ast.NewIdent(parts[0]), //assume key is string or integer
+					Key:   ast.NewIdent(keyType), // The schema parser ignores map keys.
 					Value: expr,
 				},
 			},
 			Enums:      typeSpecDef.Enums,
 			PkgPath:    typeSpecDef.PkgPath,
 			ParentSpec: typeSpecDef.ParentSpec,
-			SchemaName: "map_" + parts[0] + "_" + typeSpecDef.SchemaName,
+			SchemaName: "map_" + keyType + "_" + typeSpecDef.SchemaName,
 			NotUnique:  false,
 		}
 	}
@@ -206,6 +214,9 @@ func (pkgDefs *PackagesDefinitions) parametrizeGenericType(file *ast.File, origi
 
 // splitGenericsTypeName splits a generic struct name in his parts
 func splitGenericsTypeName(fullGenericForm string) (string, []string) {
+	if _, err := typeDelimiterIndices(fullGenericForm, 0); err != nil {
+		return "", nil
+	}
 	//remove all spaces character
 	fullGenericForm = strings.Map(func(r rune) rune {
 		if unicode.IsSpace(r) {
@@ -215,31 +226,29 @@ func splitGenericsTypeName(fullGenericForm string) (string, []string) {
 	}, fullGenericForm)
 
 	// split only at the first '[' and remove the last ']'
-	if fullGenericForm[len(fullGenericForm)-1] != ']' {
+	if len(fullGenericForm) == 0 || fullGenericForm[len(fullGenericForm)-1] != ']' {
 		return "", nil
 	}
 
-	genericParams := strings.SplitN(fullGenericForm[:len(fullGenericForm)-1], "[", 2)
-	if len(genericParams) == 1 {
+	brackets, err := typeDelimiterIndices(fullGenericForm, '[')
+	if err != nil || len(brackets) != 1 || brackets[0] == 0 {
 		return "", nil
 	}
 
 	// generic type name
-	genericTypeName := genericParams[0]
-
-	depth := 0
-	genericParams = strings.FieldsFunc(genericParams[1], func(r rune) bool {
-		if r == '[' {
-			depth++
-		} else if r == ']' {
-			depth--
-		} else if r == ',' && depth == 0 {
-			return true
-		}
-		return false
-	})
-	if depth != 0 {
+	genericTypeName := fullGenericForm[:brackets[0]]
+	genericParams, err := splitTypeList(fullGenericForm[brackets[0]+1 : len(fullGenericForm)-1])
+	if err != nil {
 		return "", nil
+	}
+	// Go permits a trailing comma, but never a missing type argument.
+	if len(genericParams) > 1 && genericParams[len(genericParams)-1] == "" {
+		genericParams = genericParams[:len(genericParams)-1]
+	}
+	for _, param := range genericParams {
+		if param == "" {
+			return "", nil
+		}
 	}
 
 	return genericTypeName, genericParams
