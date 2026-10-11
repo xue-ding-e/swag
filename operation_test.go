@@ -217,6 +217,15 @@ func TestParseRouterCommentNoColonSignAtPathStartErr(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestParseRouterCommentWithTilde(t *testing.T) {
+	t.Parallel()
+
+	comment := `@Router /customer/{id}/~last-name [patch]`
+	operation := NewOperation(nil)
+	err := operation.ParseComment(comment, nil)
+	assert.NoError(t, err)
+}
+
 func TestParseRouterCommentMethodSeparationErr(t *testing.T) {
 	t.Parallel()
 
@@ -1313,6 +1322,34 @@ func TestParseParamCommentQueryArrayFormat(t *testing.T) {
 	assert.Equal(t, expected, string(b))
 }
 
+// Test ParseParamComment Query Params
+func TestParseParamCommentQueryArrayFormatWithStructTag(t *testing.T) {
+	parser := New()
+	parser.packages.ParseFile("test",
+		"/test/test.go",
+		"package test\ntype MyQueryParams struct{Param []string `form:\"param\" collectionFormat:\"multi\"`}",
+		ParseAll)
+	parser.packages.ParseTypes()
+	comment := `@Param anyWhat query test.MyQueryParams true "List"`
+	operation := NewOperation(parser)
+	err := operation.ParseComment(comment, nil)
+
+	assert.NoError(t, err)
+	b, _ := json.MarshalIndent(operation.Parameters, "", "    ")
+	expected := `[
+    {
+        "type": "array",
+        "items": {
+            "type": "string"
+        },
+        "collectionFormat": "multi",
+        "name": "param",
+        "in": "query"
+    }
+]`
+	assert.Equal(t, expected, string(b))
+}
+
 func TestParseParamCommentByID(t *testing.T) {
 	t.Parallel()
 
@@ -1619,6 +1656,7 @@ func TestParseParamCommentByFormDataTypeUint64(t *testing.T) {
 	expected := `[
     {
         "type": "integer",
+        "format": "int64",
         "description": "this is a test file",
         "name": "file",
         "in": "formData",
@@ -2314,21 +2352,28 @@ func TestParseSecurityCommentSimple(t *testing.T) {
 	})
 }
 
-func TestParseSecurityCommentOr(t *testing.T) {
+func TestParseSecurityCommentAnd(t *testing.T) {
 	t.Parallel()
 
-	comment := `@Security OAuth2Implicit[read, write] || Firebase[]`
+	comment := `@Security OAuth2Implicit[read, write] && Firebase[]`
 	operation := NewOperation(nil)
 
 	err := operation.ParseComment(comment, nil)
 	assert.NoError(t, err)
 
-	assert.Equal(t, operation.Security, []map[string][]string{
+	expect := []map[string][]string{
 		{
 			"OAuth2Implicit": {"read", "write"},
 			"Firebase":       {""},
 		},
-	})
+	}
+	assert.Equal(t, operation.Security, expect)
+
+	oldVersionComment := `@Security OAuth2Implicit[read, write] || Firebase[]`
+	operation = NewOperation(nil)
+	err = operation.ParseComment(oldVersionComment, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, operation.Security, expect)
 }
 
 func TestParseMultiDescription(t *testing.T) {

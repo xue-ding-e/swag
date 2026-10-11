@@ -4,14 +4,14 @@
 
 <img align="right" width="180px" src="https://raw.githubusercontent.com/swaggo/swag/master/assets/swaggo.png">
 
-[![Build Status](https://github.com/swaggo/swag/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/features/actions)
+[![Build Status](https://github.com/xue-ding-e/swag/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/features/actions)
 [![Coverage Status](https://img.shields.io/codecov/c/github/swaggo/swag/master.svg)](https://codecov.io/gh/swaggo/swag)
-[![Go Report Card](https://goreportcard.com/badge/github.com/swaggo/swag)](https://goreportcard.com/report/github.com/swaggo/swag)
+[![Go Report Card](https://goreportcard.com/badge/github.com/xue-ding-e/swag)](https://goreportcard.com/report/github.com/xue-ding-e/swag)
 [![codebeat badge](https://codebeat.co/badges/71e2f5e5-9e6b-405d-baf9-7cc8b5037330)](https://codebeat.co/projects/github-com-swaggo-swag-master)
-[![Go Doc](https://godoc.org/github.com/swaggo/swagg?status.svg)](https://godoc.org/github.com/swaggo/swag)
+[![Go Doc](https://godoc.org/github.com/xue-ding-e/swagg?status.svg)](https://godoc.org/github.com/xue-ding-e/swag)
 [![Backers on Open Collective](https://opencollective.com/swag/backers/badge.svg)](#backers)
 [![Sponsors on Open Collective](https://opencollective.com/swag/sponsors/badge.svg)](#sponsors) [![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fswaggo%2Fswag.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Fswaggo%2Fswag?ref=badge_shield)
-[![Release](https://img.shields.io/github/release/swaggo/swag.svg?style=flat-square)](https://github.com/swaggo/swag/releases)
+[![Release](https://img.shields.io/github/release/swaggo/swag.svg?style=flat-square)](https://github.com/xue-ding-e/swag/releases)
 
 
 Swag converts Go annotations to Swagger Documentation 2.0. We've created a variety of plugins for popular [Go web frameworks](#supported-web-frameworks). This allows you to quickly integrate with an existing Go project (using Swagger UI).
@@ -54,7 +54,7 @@ Swag converts Go annotations to Swagger Documentation 2.0. We've created a varie
 
 2. Install swag by using:
 ```sh
-go install github.com/swaggo/swag/cmd/swag@latest
+go install github.com/xue-ding-e/swag/cmd/swag@latest
 ```
 To build from source you need [Go](https://golang.org/dl/) (1.19 or newer).
 
@@ -63,7 +63,7 @@ Alternatively you can run the docker image:
 docker run --rm -v $(pwd):/code ghcr.io/swaggo/swag:latest
 ```
 
-Or download a pre-compiled binary from the [release page](https://github.com/swaggo/swag/releases).
+Or download a pre-compiled binary from the [release page](https://github.com/xue-ding-e/swag/releases).
 
 3. Run `swag init` in the project's root folder which contains the `main.go` file. This will parse your comments and generate the required files (`docs` folder and `docs/docs.go`).
 ```sh
@@ -153,7 +153,7 @@ OPTIONS:
 
 ## How to use it with Gin
 
-Find the example source code [here](https://github.com/swaggo/swag/tree/master/example/celler).
+Find the example source code [here](https://github.com/xue-ding-e/swag/tree/master/example/celler).
 
 Finish the steps in [Getting started](#getting-started)
 1. After using `swag init` to generate Swagger 2.0 docs, import the following packages:
@@ -323,7 +323,7 @@ swag init
 ## The swag formatter
 
 The Swag Comments can be automatically formatted, just like 'go fmt'.
-Find the result of formatting [here](https://github.com/swaggo/swag/tree/master/example/celler).
+Find the result of formatting [here](https://github.com/xue-ding-e/swag/tree/master/example/celler).
 
 Usage:
 ```shell
@@ -382,7 +382,7 @@ func (c *Controller) ListAccounts(ctx *gin.Context) {
 ## General API Info
 
 **Example**
-[celler/main.go](https://github.com/swaggo/swag/blob/master/example/celler/main.go)
+[celler/main.go](https://github.com/xue-ding-e/swag/blob/master/example/celler/main.go)
 
 | annotation  | description                                | example                         |
 |-------------|--------------------------------------------|---------------------------------|
@@ -420,12 +420,13 @@ When a short string in your documentation is insufficient, or you need images, c
 | description.markdown  | A short description of the application. Parsed from the api.md file. This is an alternative to @description    |// @description.markdown No value needed, this parses the description from api.md         																 |
 | tag.name    | Name of a tag.| // @tag.name This is the name of the tag                     |
 | tag.description.markdown   | Description of the tag this is an alternative to tag.description. The description will be read from a file named like tagname.md  | // @tag.description.markdown         |
+| tag.x-name  | The extension key, must be start by x- and take only string value | // @x-example-key value |
 
 
 ## API Operation
 
 **Example**
-[celler/controller](https://github.com/swaggo/swag/tree/master/example/celler/controller)
+[celler/controller](https://github.com/xue-ding-e/swag/tree/master/example/celler/controller)
 
 
 | annotation           | description                                                                                                                                                                                       |
@@ -470,6 +471,7 @@ Besides that, `swag` also accepts aliases for some MIME Types as follows:
 | png                   | image/png                         |
 | jpeg                  | image/jpeg                        |
 | gif                   | image/gif                         |
+| event-stream          | text/event-stream                 |
 
 
 
@@ -539,6 +541,7 @@ type Foo struct {
 Field Name | Type | Description
 ---|:---:|---
 <a name="validate"></a>validate | `string` | 	Determines the validation for the parameter. Possible values are: `required,optional`.
+<a name="json"></a>json | `string` | JSON tag options. The `omitempty` option will mark the field as not required.
 <a name="parameterDefault"></a>default | * | Declares the value of the parameter that the server will use if none is provided, for example a "count" to control the number of results per page might default to 100 if not supplied by the client in the request. (Note: "default" has no meaning for required parameters.)  See https://tools.ietf.org/html/draft-fge-json-schema-validation-00#section-6.2. Unlike JSON Schema this value MUST conform to the defined [`type`](#parameterType) for this parameter.
 <a name="parameterMaximum"></a>maximum | `number` | See https://tools.ietf.org/html/draft-fge-json-schema-validation-00#section-5.1.2.
 <a name="parameterMinimum"></a>minimum | `number` | See https://tools.ietf.org/html/draft-fge-json-schema-validation-00#section-5.1.3.
@@ -648,7 +651,7 @@ type DeepObject struct { //in `proto` package
 }
 @success 200 {object} jsonresult.JSONResult{data1=proto.Order{data=proto.DeepObject},data2=[]proto.Order{data=[]proto.DeepObject}} "desc"
 ```
-### Add response request
+### Add request headers
 
 ```go
 // @Param        X-MyHeader	  header    string    true   	"MyHeader must be set for valid response"
@@ -716,7 +719,7 @@ type Account struct {
 }
 ```
 
-[#708](https://github.com/swaggo/swag/issues/708) The parser handles only struct comments starting with `@Description` attribute.
+[#708](https://github.com/xue-ding-e/swag/issues/708) The parser handles only struct comments starting with `@Description` attribute.
 But it writes all struct field comments as is.
 
 So, generated swagger doc as follows:
@@ -738,7 +741,7 @@ So, generated swagger doc as follows:
 ```
 
 ### Use swaggertype tag to supported custom type
-[#201](https://github.com/swaggo/swag/issues/201#issuecomment-475479409)
+[#201](https://github.com/xue-ding-e/swag/issues/201#issuecomment-475479409)
 
 ```go
 type TimestampTime struct {
@@ -774,7 +777,7 @@ type Account struct {
 }
 ```
 
-[#379](https://github.com/swaggo/swag/issues/379)
+[#379](https://github.com/xue-ding-e/swag/issues/379)
 ```go
 type CerticateKeyPair struct {
 	Crt []byte `json:"crt" swaggertype:"string" format:"base64" example:"U3dhZ2dlciByb2Nrcw=="`
@@ -896,18 +899,48 @@ Each API operation.
 // @Security ApiKeyAuth
 ```
 
-Make it AND condition
+Make it OR condition
 
 ```go
 // @Security ApiKeyAuth
 // @Security OAuth2Application[write, admin]
 ```
 
-Make it OR condition
+Make it AND condition
 
 ```go
-// @Security ApiKeyAuth || firebase
-// @Security OAuth2Application[write, admin] || APIKeyAuth
+// @Security ApiKeyAuth && firebase
+// @Security OAuth2Application[write, admin] && APIKeyAuth
+```
+
+### Generate enum types from enum constants
+
+You can generate enums from ordered constants. Each enum variant can have a comment, an override name, or both. This works with both iota-defined and manually defined constants.
+
+```go
+type Difficulty string
+
+const (
+	Easy   Difficulty = "easy" // You can add a comment to the enum variant.
+	Medium Difficulty = "medium" // @name MediumDifficulty
+	Hard   Difficulty = "hard" // @name HardDifficulty You can have a name override and a comment.
+)
+
+type Class int
+
+const (
+	First Class = iota // @name FirstClass
+	Second // Name override and comment rules apply here just as above.
+	Third // @name ThirdClass This one has a name override and a comment.
+)
+
+// There is no need to add `enums:"..."` to the fields, it is automatically generated from the ordered consts.
+type Quiz struct {
+	Difficulty Difficulty
+	Class Class
+	Questions []string
+	Answers []string
+}
 ```
 
 
@@ -941,12 +974,12 @@ func GetPosts(w http.ResponseWriter, r *http.Request) {
 	_ = web.GenericNestedResponse[types.Post]{}
 }
 ```
-See [this file](https://github.com/swaggo/swag/blob/master/testdata/generics_nested/api/api.go) for more details
+See [this file](https://github.com/xue-ding-e/swag/blob/master/testdata/generics_nested/api/api.go) for more details
 and other examples.
 
 ### Change the default Go Template action delimiters
-[#980](https://github.com/swaggo/swag/issues/980)
-[#1177](https://github.com/swaggo/swag/issues/1177)
+[#980](https://github.com/xue-ding-e/swag/issues/980)
+[#1177](https://github.com/xue-ding-e/swag/issues/1177)
 
 If your swagger annotations or struct fields contain "{{" or "}}", the template generation will most likely fail, as these are the default delimiters for [go templates](https://pkg.go.dev/text/template#Template.Delims).
 
@@ -962,7 +995,7 @@ If the struct is defined in a dependency package, use `--parseDependency`.
 
 If the struct is defined in your main project, use `--parseInternal`.
 
-if you want to include both internal and from dependencies use both flags 
+if you want to include both internal and from dependencies use both flags
 ```
 swag init --parseDependency --parseInternal
 ```
@@ -972,7 +1005,7 @@ This project was inspired by [yvasiyarov/swagger](https://github.com/yvasiyarov/
 ## Contributors
 
 This project exists thanks to all the people who contribute. [[Contribute](CONTRIBUTING.md)].
-<a href="https://github.com/swaggo/swag/graphs/contributors"><img src="https://opencollective.com/swag/contributors.svg?width=890&button=false" /></a>
+<a href="https://github.com/xue-ding-e/swag/graphs/contributors"><img src="https://opencollective.com/swag/contributors.svg?width=890&button=false" /></a>
 
 
 ## Backers
