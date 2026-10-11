@@ -1,4 +1,4 @@
 package swag
 
 // Version of swag.
-const Version = "v1.16.4-xuedinge-1.4.1"
+const Version = "v1.16.6-xuedinge-dev"

@@ -1,14 +1,14 @@
 module github.com/xue-ding-e/swag
 
-go 1.18
+go 1.23.0
 
 require (
 	github.com/KyleBanks/depth v1.2.1
 	github.com/go-openapi/spec v0.20.4
 	github.com/stretchr/testify v1.7.0
 	github.com/urfave/cli/v2 v2.3.0
-	golang.org/x/text v0.14.0
-	golang.org/x/tools v0.7.0
+	golang.org/x/text v0.23.0
+	golang.org/x/tools v0.31.0
 	sigs.k8s.io/yaml v1.3.0
 )
 
@@ -25,8 +25,10 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/russross/blackfriday/v2 v2.0.1 // indirect
 	github.com/shurcooL/sanitized_anchor_name v1.0.0 // indirect
-	golang.org/x/net v0.23.0 // indirect
-	golang.org/x/sys v0.18.0 // indirect
+	github.com/swaggo/swag v1.16.6 // indirect
+	golang.org/x/mod v0.24.0 // indirect
+	golang.org/x/net v0.37.0 // indirect
+	golang.org/x/sync v0.12.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0 // indirect
 )
